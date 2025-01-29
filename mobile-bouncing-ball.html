@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bouncing Ball Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            background: #000;
+            max-width: 100%;
+            touch-action: none;
+        }
+
+        .score {
+            color: #fff;
+            font-size: 24px;
+            margin: 10px;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            padding: 20px 40px;
+            color: white;
+            border-radius: 50px;
+            font-size: 24px;
+            touch-action: none;
+        }
+
+        .instructions {
+            color: #fff;
+            margin: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">Score: <span id="score">0</span></div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="instructions">Touch left/right side to move paddle</div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        // Set canvas size based on device width
+        function resizeCanvas() {
+            const maxWidth = Math.min(window.innerWidth - 20, 600);
+            const aspectRatio = 3/4;
+            canvas.width = maxWidth;
+            canvas.height = maxWidth * aspectRatio;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const SPEED_INCREASE = 1.2;
+        const POINTS_TO_ACCELERATE = 5;
+        const PADDLE_SPEED_INCREASE = 1.15;
+        const POINTS_FOR_PADDLE_SPEED = 10;
+        const VIBRATION_DURATION = 50; // milliseconds
+
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: canvas.width * 0.015,
+            baseSpeed: canvas.width * 0.005,
+            dx: canvas.width * 0.005,
+            dy: -canvas.width * 0.005
+        };
+
+        const paddle = {
+            width: canvas.width * 0.2,
+            height: canvas.height * 0.03,
+            x: canvas.width * 0.4,
+            y: canvas.height * 0.9,
+            baseSpeed: canvas.width * 0.01,
+            speed: canvas.width * 0.01
+        };
+
+        let score = 0;
+        let gameOver = false;
+        let finalScore = 0;
+        let touchX = null;
+
+        // Touch event handlers
+        canvas.addEventListener('touchstart', handleTouch);
+        canvas.addEventListener('touchmove', handleTouch);
+        canvas.addEventListener('touchend', () => { touchX = null; });
+
+        function handleTouch(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            touchX = touch.clientX - rect.left;
+        }
+
+        function vibrate() {
+            if ("vibrate" in navigator) {
+                navigator.vibrate(VIBRATION_DURATION);
+            }
+        }
+
+        function resetGame() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.dx = ball.baseSpeed;
+            ball.dy = -ball.baseSpeed;
+            paddle.x = canvas.width / 2 - paddle.width / 2;
+            paddle.speed = paddle.baseSpeed;
+            score = 0;
+            finalScore = 0;
+            gameOver = false;
+            scoreElement.textContent = score;
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#0095DD';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddle.x, paddle.y, paddle.width, paddle.height);
+            ctx.fillStyle = '#8B4513';
+            ctx.fill();
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        function movePaddle() {
+            if (touchX !== null) {
+                const paddleCenter = paddle.x + paddle.width / 2;
+                if (touchX < paddleCenter - 5) {
+                    paddle.x -= paddle.speed;
+                } else if (touchX > paddleCenter + 5) {
+                    paddle.x += paddle.speed;
+                }
+                
+                if (paddle.x < 0) paddle.x = 0;
+                if (paddle.x + paddle.width > canvas.width) {
+                    paddle.x = canvas.width - paddle.width;
+                }
+            }
+        }
+
+        function updateBallSpeed() {
+            const speedLevel = Math.floor(score / POINTS_TO_ACCELERATE);
+            const currentSpeed = ball.baseSpeed * Math.pow(SPEED_INCREASE, speedLevel);
+            
+            const directionX = ball.dx > 0 ? 1 : -1;
+            const directionY = ball.dy > 0 ? 1 : -1;
+            ball.dx = currentSpeed * directionX;
+            ball.dy = currentSpeed * directionY;
+        }
+
+        function updatePaddleSpeed() {
+            const speedLevel = Math.floor(score / POINTS_FOR_PADDLE_SPEED);
+            paddle.speed = paddle.baseSpeed * Math.pow(PADDLE_SPEED_INCREASE, speedLevel);
+        }
+
+        function checkCollision() {
+            if (ball.x + ball.radius > paddle.x && 
+                ball.x - ball.radius < paddle.x + paddle.width &&
+                ball.y + ball.radius > paddle.y &&
+                ball.y - ball.radius < paddle.y + paddle.height) {
+                
+                vibrate();
+                return true;
+            }
+            return false;
+        }
+
+        function updateBall() {
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+                ball.dx = -ball.dx;
+                vibrate();
+            }
+            if (ball.y - ball.radius < 0) {
+                ball.dy = -ball.dy;
+                vibrate();
+            }
+
+            if (checkCollision()) {
+                ball.dy = -ball.dy;
+                score++;
+                scoreElement.textContent = score;
+                
+                if (score % POINTS_TO_ACCELERATE === 0) {
+                    updateBallSpeed();
+                }
+                if (score % POINTS_FOR_PADDLE_SPEED === 0) {
+                    updatePaddleSpeed();
+                }
+            }
+
+            if (ball.y + ball.radius > canvas.height) {
+                finalScore = score;
+                gameOver = true;
+                vibrate();
+            }
+        }
+
+        function drawGameOver() {
+            ctx.font = `${canvas.width * 0.06}px Arial`;
+            ctx.fillStyle = 'red';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER!', canvas.width / 2, canvas.height / 2 - 20);
+            ctx.fillText(`Final Score: ${finalScore}`, canvas.width / 2, canvas.height / 2 + 20);
+            ctx.font = `${canvas.width * 0.04}px Arial`;
+            ctx.fillText('Tap to restart', canvas.width / 2, canvas.height / 2 + 60);
+        }
+
+        canvas.addEventListener('click', () => {
+            if (gameOver) resetGame();
+        });
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawBall();
+            drawPaddle();
+
+            if (!gameOver) {
+                movePaddle();
+                updateBall();
+            } else {
+                drawGameOver();
+                scoreElement.textContent = finalScore;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>
